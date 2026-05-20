@@ -88,8 +88,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download Windows Full
         uses: actions/download-artifact@v4
+        with:
+          name: bluesend-windows-full
+          path: bluesend-windows-full
+
+      - name: Download Windows Framework-dependent
+        uses: actions/download-artifact@v4
+        with:
+          name: bluesend-windows-framework-dependent
+          path: bluesend-windows-framework-dependent
+
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: bluesend-android-release
+          path: bluesend-android-release
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
