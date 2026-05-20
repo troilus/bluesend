@@ -35,7 +35,7 @@ dotnet publish -r win-x64 -c Release -o publish --self-contained true -p:Publish
 
 ## 依赖
 
-- .NET 9
+- .NET 9, 官方下载地址 https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.16/windowsdesktop-runtime-9.0.16-win-x64.exe
 - [InTheHand.Net.Bluetooth](https://www.nuget.org/packages/InTheHand.Net.Bluetooth) (32feet.NET)
 
 ## 要求
