@@ -11,13 +11,7 @@ dotnet publish -c Release -r %RUNTIME% --self-contained false -p:PublishSingleFi
 if %errorlevel% neq 0 ( echo Framework-dependent build failed! & pause & exit /b 1 )
 
 echo.
-echo ========== 3. Trimmed Self-contained (~30-50MB) ==========
-dotnet publish -c Release -r %RUNTIME% --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true -p:TrimMode=link -p:EnableCompressionInSingleFile=true -p:DebugType=none -o publish\trimmed
-if %errorlevel% neq 0 ( echo Trimmed build failed! & pause & exit /b 1 )
-
-echo.
 echo ========== All builds complete! ==========
 echo 1. Full:           publish\full\BlueSend.exe
 echo 2. Framework-dep:  publish\framework-dependent\BlueSend.exe
-echo 3. Trimmed:        publish\trimmed\BlueSend.exe
 pause
