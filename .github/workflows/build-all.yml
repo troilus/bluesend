@@ -106,6 +106,12 @@ jobs:
           name: bluesend-android-release
           path: bluesend-android-release
 
+      - name: Rename Windows exes for release
+        shell: bash
+        run: |
+          mv bluesend-windows-full/BlueSend.exe bluesend-windows-full/BlueSend-full.exe
+          mv bluesend-windows-framework-dependent/BlueSend.exe bluesend-windows-framework-dependent/BlueSend-framework-dependent.exe
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -114,6 +120,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            bluesend-windows-full/BlueSend.exe
-            bluesend-windows-framework-dependent/BlueSend.exe
+            bluesend-windows-full/BlueSend-full.exe
+            bluesend-windows-framework-dependent/BlueSend-framework-dependent.exe
             bluesend-android-release/*.apk
