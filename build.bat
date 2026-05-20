@@ -7,7 +7,7 @@ if %errorlevel% neq 0 ( echo Full build failed! & pause & exit /b 1 )
 
 echo.
 echo ========== 2. Framework-dependent (~5MB) ==========
-dotnet publish -c Release -r %RUNTIME% --self-contained false -p:PublishSingleFile=true -o publish\framework-dependent
+dotnet publish -c Release -r %RUNTIME% --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\framework-dependent
 if %errorlevel% neq 0 ( echo Framework-dependent build failed! & pause & exit /b 1 )
 
 echo.

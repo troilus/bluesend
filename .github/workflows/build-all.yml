@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build-windows-full:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,22 +23,32 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Build Self-contained
-        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\full
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
-      - name: Build Framework-dependent
-        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish\framework-dependent
-
-      - name: Upload Windows Full (Self-contained)
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: bluesend-windows-full
-          path: publish/full/BlueSend.exe
+          path: publish/BlueSend.exe
 
-      - name: Upload Windows Framework-dependent
+  build-windows-framework-dependent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Framework-dependent
+        run: dotnet publish -c Release --self-contained false -p:PublishSingleFile=true -o publish
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: bluesend-windows-framework-dependent
-          path: publish/framework-dependent/BlueSend.exe
+          path: publish/BlueSend.exe
 
   build-android:
     runs-on: ubuntu-latest
@@ -81,7 +91,7 @@ jobs:
           if-no-files-found: error
 
   create-release:
-    needs: [build-windows, build-android]
+    needs: [build-windows-full, build-windows-framework-dependent, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
