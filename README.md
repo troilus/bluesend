@@ -1,8 +1,10 @@
 # BlueSend
 
-蓝牙文字通信 + 文件传输工具。两台 Windows 电脑通过蓝牙配对后，即可收发文字消息和文件。
+蓝牙文字通信 + 文件传输工具。两台 Windows 电脑、或者Windows和Android通过蓝牙配对后，即可收发文字消息和文件。
 <img width="506" height="673" alt="图片" src="https://github.com/user-attachments/assets/90fe1093-1cfc-4937-a44f-2076eb852354" />
 <img width="506" height="673" alt="图片" src="https://github.com/user-attachments/assets/9c62cdc1-4c01-46b2-8d74-5762e6816996" />
+<img width="441" height="947" alt="4c72f5228cc5cd7e159d92a946503fdb" src="https://github.com/user-attachments/assets/4e9703e6-aa49-4b65-b05b-b1e2536bfe91" />
+
 
 
 ## 功能
