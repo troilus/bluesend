@@ -16,12 +16,17 @@ public enum PacketType : byte
     FileStart = 1,
     FileChunk = 2,
     FileEnd = 3,
+    ProxyConnect = 4,
+    ProxyData = 5,
+    ProxyClose = 6,
+    ProxyStatus = 7,
 }
 
 public class BluetoothManager : IDisposable
 {
     private static readonly Guid ChatServiceUuid = new("d4a8c5e0-9c4a-4f4a-9c8a-1a2b3c4d5e6f");
     private const int ChunkSize = 32768;
+    internal const int MaxProxyPacketSize = 32768;
 
     private BluetoothListener? _listener;
     private BluetoothClient? _client;
@@ -39,6 +44,7 @@ public class BluetoothManager : IDisposable
     }
     private FileReceiveState? _recvFile;
     private readonly object _recvLock = new();
+    private readonly object _writeLock = new();
 
     public bool IsConnected => _stream?.CanRead == true && _stream?.CanWrite == true;
     public string? LocalAddress { get; private set; }
@@ -50,6 +56,11 @@ public class BluetoothManager : IDisposable
     public event EventHandler<(string fileName, long fileSize)>? FileTransferStarted;
     public event EventHandler<(string fileName, int percentage)>? FileTransferProgress;
     public event EventHandler<(string fileName, string savedPath)>? FileTransferCompleted;
+
+    public event EventHandler<(ushort connId, string host, ushort port)>? ProxyConnectReceived;
+    public event EventHandler<(ushort connId, byte[] data)>? ProxyDataReceived;
+    public event EventHandler<ushort>? ProxyCloseReceived;
+    public event EventHandler<(ushort connId, bool success)>? ProxyStatusReceived;
 
     public string GetLocalAddress()
     {
@@ -173,6 +184,43 @@ public class BluetoothManager : IDisposable
                     case PacketType.FileEnd:
                         HandleFileEnd(payload);
                         break;
+                    case PacketType.ProxyConnect:
+                        if (payload.Length >= 4)
+                        {
+                            var connId = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(0));
+                            var hostLen = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(2));
+                            if (payload.Length >= 4 + hostLen + 2)
+                            {
+                                var host = Encoding.UTF8.GetString(payload, 4, hostLen);
+                                var port = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(4 + hostLen));
+                                ProxyConnectReceived?.Invoke(this, (connId, host, port));
+                            }
+                        }
+                        break;
+                    case PacketType.ProxyData:
+                        if (payload.Length >= 6)
+                        {
+                            var connId = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(0));
+                            var data = new byte[payload.Length - 2];
+                            Buffer.BlockCopy(payload, 2, data, 0, data.Length);
+                            ProxyDataReceived?.Invoke(this, (connId, data));
+                        }
+                        break;
+                    case PacketType.ProxyClose:
+                        if (payload.Length >= 2)
+                        {
+                            var connId = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(0));
+                            ProxyCloseReceived?.Invoke(this, connId);
+                        }
+                        break;
+                    case PacketType.ProxyStatus:
+                        if (payload.Length >= 3)
+                        {
+                            var connId = BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(0));
+                            var success = payload[2] == 0;
+                            ProxyStatusReceived?.Invoke(this, (connId, success));
+                        }
+                        break;
                 }
             }
         }
@@ -269,8 +317,12 @@ public class BluetoothManager : IDisposable
             packet[0] = (byte)PacketType.Text;
             BinaryPrimitives.WriteInt32BigEndian(packet.AsSpan(1), data.Length);
             data.CopyTo(packet, 5);
-            _stream.Write(packet);
-            _stream.Flush();
+            lock (_writeLock)
+            {
+                if (_stream == null) return;
+                _stream.Write(packet);
+                _stream.Flush();
+            }
         }
         catch (Exception ex)
         {
@@ -336,10 +388,65 @@ public class BluetoothManager : IDisposable
         header[0] = (byte)type;
         BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(1), payload.Length);
 
-        _stream.Write(header);
-        if (payload.Length > 0)
-            _stream.Write(payload);
-        _stream.Flush();
+        lock (_writeLock)
+        {
+            if (_stream == null) return;
+            _stream.Write(header);
+            if (payload.Length > 0)
+                _stream.Write(payload);
+            _stream.Flush();
+        }
+    }
+
+    private void SendPacketRaw(PacketType type, byte[] payload)
+    {
+        if (_stream == null) return;
+        var header = new byte[5];
+        header[0] = (byte)type;
+        BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(1), payload.Length);
+
+        lock (_writeLock)
+        {
+            if (_stream == null) return;
+            _stream.Write(header);
+            if (payload.Length > 0)
+                _stream.Write(payload);
+            _stream.Flush();
+        }
+    }
+
+    public void SendProxyConnect(ushort connId, string host, ushort port)
+    {
+        var hostBytes = Encoding.UTF8.GetBytes(host);
+        var payload = new byte[2 + 2 + hostBytes.Length + 2];
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(0), connId);
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(2), (ushort)hostBytes.Length);
+        hostBytes.CopyTo(payload, 4);
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(4 + hostBytes.Length), port);
+        SendPacketRaw(PacketType.ProxyConnect, payload);
+    }
+
+    public void SendProxyData(ushort connId, byte[] data)
+    {
+        var payload = new byte[2 + data.Length];
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(0), connId);
+        data.CopyTo(payload, 2);
+        SendPacketRaw(PacketType.ProxyData, payload);
+    }
+
+    public void SendProxyClose(ushort connId)
+    {
+        var payload = new byte[2];
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(0), connId);
+        SendPacketRaw(PacketType.ProxyClose, payload);
+    }
+
+    public void SendProxyStatus(ushort connId, bool success)
+    {
+        var payload = new byte[3];
+        BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(0), connId);
+        payload[2] = (byte)(success ? 0 : 1);
+        SendPacketRaw(PacketType.ProxyStatus, payload);
     }
 
     // ====== Helpers ======

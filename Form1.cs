@@ -31,6 +31,17 @@ public partial class Form1 : Form
     private readonly List<(int start, int length, string filePath, string fileName, long fileSize)> _fileEntries = new();
     private string _contextFilePath = "";
 
+    // Proxy
+    private bool _isServerMode;
+    private ProxyForwarder? _proxyForwarder;
+    private Socks5Server? _socksServer;
+    private Panel? _pnlProxy;
+    private Button? _btnToggleProxy;
+    private Label? _lblProxyStatus;
+    private TextBox? _txtSocksPort;
+    private TextBox? _txtMaxConns;
+    private bool _proxyRunning;
+
     public Form1()
     {
         Text = "BlueSend";
@@ -317,7 +328,7 @@ public partial class Form1 : Form
             ReadOnly = true,
             Font = new Font("Microsoft YaHei", 10),
             Location = new Point(10, 10),
-            Size = new Size(ClientSize.Width - 20, ClientSize.Height - 120),
+            Size = new Size(ClientSize.Width - 20, ClientSize.Height - 200),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
             BackColor = Color.White,
             BorderStyle = BorderStyle.FixedSingle,
@@ -326,6 +337,8 @@ public partial class Form1 : Form
         _txtChat.AppendText("系统: 连接已建立，可以开始聊天了！\n");
         _txtChat.MouseDown += TxtChat_MouseDown;
         _pnlChat.Controls.Add(_txtChat);
+
+        BuildProxyPanel();
 
         var inputPanel = new Panel
         {
@@ -537,6 +550,258 @@ public partial class Form1 : Form
         });
     }
 
+    // ======================== PROXY ========================
+
+    private void BuildProxyPanel()
+    {
+        _pnlProxy = new Panel
+        {
+            Location = new Point(10, ClientSize.Height - 175),
+            Size = new Size(ClientSize.Width - 20, 70),
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        LoadProxyConfig();
+
+        var y = 6;
+        if (_isServerMode)
+        {
+            var lbl = new Label
+            {
+                Text = "代理转发器:",
+                Font = new Font("Microsoft YaHei", 9, FontStyle.Bold),
+                Location = new Point(8, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(lbl);
+
+            _lblProxyStatus = new Label
+            {
+                Text = "已停止",
+                Font = new Font("Microsoft YaHei", 9),
+                ForeColor = Color.Gray,
+                Location = new Point(100, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(_lblProxyStatus);
+        }
+        else
+        {
+            var lbl = new Label
+            {
+                Text = "SOCKS5 代理:",
+                Font = new Font("Microsoft YaHei", 9, FontStyle.Bold),
+                Location = new Point(8, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(lbl);
+
+            var lblPort = new Label
+            {
+                Text = "端口:",
+                Font = new Font("Microsoft YaHei", 9),
+                Location = new Point(110, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(lblPort);
+
+            _txtSocksPort = new TextBox
+            {
+                Text = _socksPort.ToString(),
+                Font = new Font("Consolas", 9),
+                Size = new Size(48, 22),
+                Location = new Point(146, y - 2)
+            };
+            _pnlProxy.Controls.Add(_txtSocksPort);
+
+            var lblMax = new Label
+            {
+                Text = "最大连接:",
+                Font = new Font("Microsoft YaHei", 9),
+                Location = new Point(200, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(lblMax);
+
+            _txtMaxConns = new TextBox
+            {
+                Text = _maxConns.ToString(),
+                Font = new Font("Consolas", 9),
+                Size = new Size(36, 22),
+                Location = new Point(268, y - 2)
+            };
+            _pnlProxy.Controls.Add(_txtMaxConns);
+
+            _lblProxyStatus = new Label
+            {
+                Text = "已停止",
+                Font = new Font("Microsoft YaHei", 9),
+                ForeColor = Color.Gray,
+                Location = new Point(315, y), AutoSize = true
+            };
+            _pnlProxy.Controls.Add(_lblProxyStatus);
+        }
+
+        y += 24;
+        _btnToggleProxy = new Button
+        {
+            Text = "⚡ 启动代理",
+            Font = new Font("Microsoft YaHei", 9),
+            Size = new Size(130, 30),
+            Location = new Point(8, y),
+            FlatStyle = FlatStyle.System,
+            Cursor = Cursors.Hand
+        };
+        _btnToggleProxy.Click += BtnToggleProxy_Click;
+        _pnlProxy.Controls.Add(_btnToggleProxy);
+
+        var lblHint = new Label
+        {
+            Text = _isServerMode
+                ? "为蓝牙客户端提供网络代理转发"
+                : "应用设置 SOCKS5 代理为 127.0.0.1:端口",
+            Font = new Font("Microsoft YaHei", 8),
+            ForeColor = Color.Gray,
+            Location = new Point(145, y + 6), AutoSize = true
+        };
+        _pnlProxy.Controls.Add(lblHint);
+
+        _pnlChat!.Controls.Add(_pnlProxy);
+    }
+
+    private int _socksPort = 1080;
+    private int _maxConns = 10;
+
+    private void LoadProxyConfig()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BlueSend", "proxy_config.json");
+            if (File.Exists(path))
+            {
+                var json = File.ReadAllText(path);
+                var cfg = System.Text.Json.JsonSerializer.Deserialize<ProxyConfig>(json);
+                if (cfg != null)
+                {
+                    _socksPort = cfg.SocksPort;
+                    _maxConns = cfg.MaxConnections;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void SaveProxyConfig()
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BlueSend");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "proxy_config.json");
+            var cfg = new ProxyConfig
+            {
+                SocksPort = _socksPort,
+                MaxConnections = _maxConns
+            };
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(cfg));
+        }
+        catch { }
+    }
+
+    private void BtnToggleProxy_Click(object? sender, EventArgs e)
+    {
+        if (_proxyRunning)
+        {
+            StopProxy();
+        }
+        else
+        {
+            StartProxy();
+        }
+    }
+
+    private void StartProxy()
+    {
+        if (!_connected || _bt == null) return;
+
+        if (_isServerMode)
+        {
+            var max = _maxConns;
+            if (_txtMaxConns != null && int.TryParse(_txtMaxConns.Text, out var m))
+                max = Math.Clamp(m, 1, 100);
+            _maxConns = max;
+            _proxyForwarder = new ProxyForwarder(_bt, max);
+            _proxyForwarder.Start();
+            _proxyRunning = true;
+            _btnToggleProxy!.Text = "⏹ 停止代理";
+            _lblProxyStatus!.Text = "运行中";
+            _lblProxyStatus.ForeColor = Color.Green;
+            _txtMaxConns?.Invoke(() => _txtMaxConns.Enabled = false);
+        }
+        else
+        {
+            var port = _socksPort;
+            if (_txtSocksPort != null && int.TryParse(_txtSocksPort.Text, out var p))
+                port = Math.Clamp(p, 1024, 65535);
+            var max = _maxConns;
+            if (_txtMaxConns != null && int.TryParse(_txtMaxConns.Text, out var m))
+                max = Math.Clamp(m, 1, 100);
+            _socksPort = port;
+            _maxConns = max;
+
+            _socksServer = new Socks5Server(_bt, port, max);
+            _socksServer.RunningChanged += (_, running) =>
+            {
+                if (!running) StopProxy();
+            };
+            _socksServer.Start();
+            _proxyRunning = true;
+            _btnToggleProxy!.Text = "⏹ 停止代理";
+            _lblProxyStatus!.Text = $"运行中 (127.0.0.1:{port})";
+            _lblProxyStatus.ForeColor = Color.Green;
+            _txtSocksPort?.Invoke(() => _txtSocksPort.Enabled = false);
+            _txtMaxConns?.Invoke(() => _txtMaxConns.Enabled = false);
+        }
+
+        SaveProxyConfig();
+    }
+
+    private void StopProxy()
+    {
+        if (_proxyForwarder != null)
+        {
+            _proxyForwarder.Stop();
+            _proxyForwarder.Dispose();
+            _proxyForwarder = null;
+        }
+        if (_socksServer != null)
+        {
+            _socksServer.Stop();
+            _socksServer.Dispose();
+            _socksServer = null;
+        }
+        _proxyRunning = false;
+        if (_btnToggleProxy != null && !_btnToggleProxy.IsDisposed)
+        {
+            _btnToggleProxy.Invoke(() =>
+            {
+                _btnToggleProxy.Text = "⚡ 启动代理";
+            });
+        }
+        if (_lblProxyStatus != null && !_lblProxyStatus.IsDisposed)
+        {
+            _lblProxyStatus.Invoke(() =>
+            {
+                _lblProxyStatus.Text = "已停止";
+                _lblProxyStatus.ForeColor = Color.Gray;
+            });
+        }
+        if (_txtSocksPort != null && !_txtSocksPort.IsDisposed)
+            _txtSocksPort.Invoke(() => _txtSocksPort.Enabled = true);
+        if (_txtMaxConns != null && !_txtMaxConns.IsDisposed)
+            _txtMaxConns.Invoke(() => _txtMaxConns.Enabled = true);
+    }
+
     // ======================== BLUETOOTH EVENTS ========================
 
     private void Bt_Connected(object? sender, string remoteAddr)
@@ -547,10 +812,12 @@ public partial class Form1 : Form
             if (sender == _bt && _pnlServerWait != null && !_pnlServerWait.IsDisposed)
             {
                 _otherName = remoteAddr;
+                _isServerMode = true;
                 BuildChatPanel();
             }
             else if (_pnlClientConnect != null && !_pnlClientConnect.IsDisposed)
             {
+                _isServerMode = false;
                 BuildChatPanel();
             }
             else if (_connected)
@@ -563,6 +830,7 @@ public partial class Form1 : Form
     private void Bt_Disconnected(object? sender, EventArgs e)
     {
         _connected = false;
+        StopProxy();
         Invoke(() => AppendSystemMessage("对方已断开连接"));
     }
 
@@ -621,6 +889,7 @@ public partial class Form1 : Form
 
     private void CancelAndGoHome()
     {
+        StopProxy();
         _bt.Stop();
         _connected = false;
         Text = "BlueSend";
@@ -630,6 +899,13 @@ public partial class Form1 : Form
 
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
+        StopProxy();
         _bt.Dispose();
     }
+}
+
+internal sealed class ProxyConfig
+{
+    public int SocksPort { get; set; } = 1080;
+    public int MaxConnections { get; set; } = 10;
 }
