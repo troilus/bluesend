@@ -20,16 +20,16 @@ jobs:
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.306'
+          dotnet-version: '9.0.x'
 
       - name: Build Self-contained
-        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\full
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: bluesend-windows-full
-          path: publish/BlueSend.exe
+          path: publish/full/BlueSend.exe
 
   build-windows-framework-dependent:
     runs-on: windows-latest
@@ -39,16 +39,16 @@ jobs:
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.306'
+          dotnet-version: '9.0.x'
 
       - name: Build Framework-dependent
-        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\framework-dependent
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: bluesend-windows-framework-dependent
-          path: publish/BlueSend.exe
+          path: publish/framework-dependent/BlueSend.exe
 
   build-android:
     runs-on: ubuntu-latest
