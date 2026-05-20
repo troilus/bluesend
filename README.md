@@ -1,6 +1,6 @@
 # BlueSend
 
-蓝牙文字通信 + 文件传输工具。两台 Windows 电脑通过蓝牙配对后，即可收发文字消息和文件。
+蓝牙文字通信 + 文件传输工具（Windows + Android）。Windows 电脑间或 Android 设备间通过蓝牙配对后，即可收发文字消息和文件。
 <img width="506" height="673" alt="图片" src="https://github.com/user-attachments/assets/90fe1093-1cfc-4937-a44f-2076eb852354" />
 <img width="506" height="673" alt="图片" src="https://github.com/user-attachments/assets/9c62cdc1-4c01-46b2-8d74-5762e6816996" />
 
@@ -20,26 +20,55 @@
 
 ## 构建
 
+### Windows 桌面版
+
+构建需要 [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)。
+
 ```bash
+# 开发构建
 dotnet restore
 dotnet build
-```
 
-发布单文件：
+# Self-contained 单文件发布（~100MB，无需运行时）
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\full
 
-```bash
-dotnet publish -r win-x64 -c Release -o publish --self-contained true -p:PublishSingleFile=true
+# Framework-dependent 单文件发布（~5MB，需安装 .NET 运行时）
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\framework-dependent
 ```
 
 或直接双击 `build.bat`。
 
+### Android 版
+
+构建需要 JDK 17 和 Android SDK（platform 34, build-tools 34.0.0）。
+
+```bash
+cd android
+./gradlew assembleDebug   # 调试版
+./gradlew assembleRelease  # 发布版
+```
+
+### CI/CD
+
+提交代码后 GitHub Actions 自动构建 Android 版；手动触发 [Build All Platforms](https://github.com/anomalyco/BlueSend/actions/workflows/build-all.yml) 可同时构建 Windows（Self-contained + Framework-dependent）和 Android 产物并发布 Release。
+
 ## 依赖
 
-- .NET 9, 官方下载地址 https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.16/windowsdesktop-runtime-9.0.16-win-x64.exe
+### Windows
+- .NET 9 运行时（Framework-dependent 版本需要）：https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.16/windowsdesktop-runtime-9.0.16-win-x64.exe
 - [InTheHand.Net.Bluetooth](https://www.nuget.org/packages/InTheHand.Net.Bluetooth) (32feet.NET)
+
+### Android
+- Jetpack Compose (Material 3, Navigation)
+- Kotlin Coroutines
 
 ## 要求
 
+### Windows
 - Windows 10 / 11（支持 Bluetooth）
 - 两台电脑已通过 Windows 蓝牙设置完成配对
 - .NET 9 运行时（如使用自包含发布则无需）
+
+### Android
+- Android 7.0 (API 24) 及以上
+- 支持 Bluetooth 的设备

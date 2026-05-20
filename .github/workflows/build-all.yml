@@ -1,0 +1,104 @@
+name: Build All Platforms
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build Self-contained
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\full
+
+      - name: Build Framework-dependent
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\framework-dependent
+
+      - name: Upload Windows Full (Self-contained)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluesend-windows-full
+          path: publish/full/BlueSend.exe
+
+      - name: Upload Windows Framework-dependent
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluesend-windows-framework-dependent
+          path: publish/framework-dependent/BlueSend.exe
+
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components
+        run: |
+          cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME \
+            "platforms;android-34" "build-tools;34.0.0" || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.6
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.6
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluesend-android-release
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  create-release:
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: BlueSend ${{ github.event.inputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            bluesend-windows-full/BlueSend.exe
+            bluesend-windows-framework-dependent/BlueSend.exe
+            bluesend-android-release/*.apk
