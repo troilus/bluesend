@@ -24,3 +24,5 @@ android/local.properties
 android/gradle/wrapper/gradle-wrapper.jar
 *.iml
 .idea/
+publish/framework-dependent/BlueSend.pdb
+/publish/full
